@@ -10,7 +10,7 @@ MY_INCLUDES =
 
 
 CCX = g++
-CXXFLAGS = -g -Wall
+CXXFLAGS = -Wall -g -std=c++14
 
 #============================================================
 all: $(TARGET)

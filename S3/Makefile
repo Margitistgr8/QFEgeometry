@@ -3,23 +3,24 @@
 #============================================================
 TARGET	=  Tetra
 
-C_SOURCES =  Tetra.cpp
+C_SOURCES =  Tetra.cpp 
 C_OBJS     =  Tetra.o 
-MY_INCLUDES =
+MY_INCLUDES = -I.
 #triangle.h
 
 
 CCX = g++
-CXXFLAGS = -Wall -g -std=c++14
+CXXFLAGS = -Wall -g -std=c++14 ${MY_INCLUDES}
 
 #============================================================
 all: $(TARGET)
 
-.o:.cpp	$(MY_INCLUDES)
-	$(CCX)  -c  $(CXXFLAGS) $<  
+.cpp.o:
+	$(CCX) -c $(CXXFLAGS) $< -o $@
 
-$(TARGET) :   $(C_OBJS)
-	$(CCX) $(CXXFLAGS)  $^ $(LIBDIRS)  -o $@
+$(TARGET): $(C_OBJS)
+	$(CCX) $(CXXFLAGS) $^ $(LIBDIRS) -o $@
+
 
 # Implici rules: $@ = target name, $< = first prerequisite name, $^ = name of all prerequisites
 #============================================================

@@ -67,7 +67,7 @@ int main( int argc, char *argv[])
   printEven(tetraVertex, p);
   std::vector<int> orbitlabels = FindOrbitLabels(tetraVertex,p);
   for (int i = 0; i<p.EvenNum; i++)
-  {std::cout<<orbitlabels[i]<<" "; }
+  {std::cout<<orbitlabels[i]<<" "<< tetraVertex[i][0]<<" "<<tetraVertex[i][1]<<" "<<tetraVertex[i][2]<<"\n"; }
   printf("\n"); 
   std::vector<std::vector<int>> orbit_reps = FindOrbitRepresentative(orbitlabels, tetraVertex, p); 
   for (size_t i = 0; i < orbit_reps.size(); ++i) {  // Loop over rows

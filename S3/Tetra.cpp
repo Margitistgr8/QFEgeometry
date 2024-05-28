@@ -41,6 +41,17 @@ int main( int argc, char *argv[])
   cout << "  p.EvenNum "<<  p.EvenNum << endl;
   
   int tetraVertex[p.EvenNum][3];
+  Eigen::Vector3d r1 = {0,0,0}; 
+  Eigen::Vector3d r2 = {1,1,0}; 
+  Eigen::Vector3d r3 = {1,0,1}; 
+  Eigen::Vector3d r4 = {0,1,1}; 
+  
+  printf("test\n");
+  std::vector<int> test = {1,2,3,4};
+  std::vector<int> object = {3,1,2,4}; 
+  std::vector<int> res = MatchIndices(test, object); //gives indices to match object[i] to target
+  //res = (1,2,0,3)
+
 
   // int nx,ny, nz;
 
@@ -70,13 +81,19 @@ int main( int argc, char *argv[])
   {std::cout<<orbitlabels[i]<<" "<< tetraVertex[i][0]<<" "<<tetraVertex[i][1]<<" "<<tetraVertex[i][2]<<"\n"; }
   printf("\n"); 
   std::vector<std::vector<int>> orbit_reps = FindOrbitRepresentative(orbitlabels, tetraVertex, p); 
-  for (size_t i = 0; i < orbit_reps.size(); ++i) {  // Loop over rows
-        std::cout << i << " ";
-    for (size_t j = 0; j < orbit_reps[i].size(); ++j) {  // Loop over columns
+  for (size_t i = 0; i < orbit_reps.size(); ++i) 
+  {  // Loop over rows
+    std::cout << i << " ";
+    for (size_t j = 0; j < orbit_reps[i].size(); ++j) 
+    {  // Loop over columns
         std::cout << orbit_reps[i][j] << " ";
     }
-    std::cout << std::endl;  // New line after each row
-}
+    std::cout << std::endl;  // New line after each row    
+  }
+  for (int i=0; i<p.EvenNum; i++){
+    std::cout << i << " "<< orbitlabels[i] << "\n";
+  }
+
   std::cout << "Printing Tetrahedrons...\n"; 
   std::vector<T> tetra= FindTetrahedronRepresentative(orbit_reps, tetraVertex,p); 
   for (size_t i = 0; i < tetra.size(); ++i) {  // Loop over rows

@@ -4,6 +4,7 @@
 #include <stack>
 #include <algorithm>
 #include <iterator>
+#include <unordered_map>
 #include <set>
 #include <Eigen/Core> // Core Eigen functionality
 #include <Eigen/Sparse>
@@ -15,9 +16,10 @@ using Tensor2D = std::vector<std::vector<T>>;
 
 struct param{
   int L;
-  int N;
+  int N;      
   int EvenNum;
-};
+};      
+
 
 struct T{
   std::vector<int> Vert; 
@@ -25,13 +27,35 @@ struct T{
   int wt; 
 };
 
+double TetrahedronVol(Eigen::Vector4d& r1, Eigen::Vector4d& r2, Eigen::Vector4d& r3, Eigen::Vector4d& r4)
+{
+  Eigen::Vector4d e1 = r4-r1;
+  Eigen::Vector4d e2 = r3-r1;
+  Eigen::Vector4d e3 = r2-r1;  
+  return std::abs(e1.dot(e2.cross(e3)))/6.0; 
+}
+
+
+
+//Compute Nabla_x V for x a vertex of the tetrahedron (Nabla_x V  = 1/3 A hat{N} where A is the area of the triangle
+//facing the vertex, hat{N} is the inwards normal)
+Eigen::Vector4d VertexDerivative(Eigen::Vector4d& r1, Eigen::Vector4d& r2, Eigen::Vector4d& r3, Eigen::Vector4d& r4)
+{
+  Eigen::Vector4d e1 = r4-r2;  
+  Eigen::Vector4d e2 = r3-r2; //e1 e2 defines vectors on the opposing triangle
+  Eigen::Vector4d e3 = r2-r1; //e3 is used to ensure the direction of Nabla_xV is inwards normal
+  Eigen::Vector4d Area = e1.cross(e2)/2.0;  //Need to generalize the way to find normal direction
+  if (Area.dot(e3)>=0){return -Area/3.0;}
+  else {return Area/3.0;}
+}
+
 Tensor2D<Eigen::Vector4d> FindDerivative(std::vector<Eigen::Vector4d>& r, Tensor2D<int>& orbitReps)
 {
   Tensor2D<Eigen::Vector4d> results; 
   for (size_t i=0; i< orbitReps.size(); i++)
   {
     Eigen::Vector4d nd={0.0, 0.0, 0.0, 0.0};
-    std::vector vec = orbitReps[i]; 
+    std::vector<int> vec = orbitReps[i]; 
     auto it = std::find_if(vec.begin(), vec.end(), [](int i) { return i != 0; });
     int distance = std::distance(vec.begin(), it); //Number of steps from the begining to first non-zero
     
@@ -45,37 +69,32 @@ Tensor2D<Eigen::Vector4d> FindDerivative(std::vector<Eigen::Vector4d>& r, Tensor
       
       else if (distance==2)
       {//We are at an edge
-          if (n_distinct==1){result.push_back({nd, nd, nd, nd});}
-          else{result.push_back({nd, nd, r[2]-r[3], r[3]-r[2]});}
+          if (n_distinct==1){results.push_back({nd, nd, nd});}
+          else{results.push_back({nd, nd, r[2]-r[3]});}
       }
 
       else if (distance==1)//We are at a face
       {
-        if (n_distinct==1){result.push_back({nd, nd, nd, nd});} //Center of Triangle face
+        if (n_distinct==1){results.push_back({nd, nd, nd});} //Center of Triangle face
 
         else if (n_distinct==2)
           {
             if (vec[distance]==vec[distance+1])
-            {//xi^2 = xi^3 constrant
+            {//xi^2 = xi^3 constrant//There is only one d.o.f.
               Eigen::Vector4d v1 = r[1]+r[2]-2*r[3]; 
-              Eigen::Vector4d v2 = r[1]+r[2]-2*r[3]; 
-              Eigen::Vector4d v3 = r[3]-0.5*r[2]-0.5*r[1]; 
-              result.push_back({nd, v1, v2, v3});
+              results.push_back({nd, v1, nd});
             } 
             else
               {//xi^3 = xi^4 constrant
-              Eigen::Vector4d v1 = r[1]-0.5*r[2]-0.5*r[3]; 
-              Eigen::Vector4d v2 = r[2]+r[3]-2*r[1]; 
-              Eigen::Vector4d v3 = r[2]+r[3]-2*r[1]; 
-              result.push_back({nd, v1, v2, v3});
+              Eigen::Vector4d v1 = r[1]-2*r[2]-2*r[3]; 
+              results.push_back({nd, v1, nd});
               }
           }
         else
           {
             Eigen::Vector4d v1 = r[1]-r[3]; 
             Eigen::Vector4d v2 = r[2]-r[3]; 
-            Eigen::Vector4d v3 = 2*r[3]-r[1]-r[2]; 
-            result.push_back({nd, v1, v2, v3});           
+            results.push_back({nd, v1, v2});           
           }
       }
     }
@@ -84,26 +103,20 @@ Tensor2D<Eigen::Vector4d> FindDerivative(std::vector<Eigen::Vector4d>& r, Tensor
     {//We are at an interior point 
       std::set<int> unique_labels(vec.begin(), vec.end());
       int n_distinct = unique_labels.size(); //Number of distinct points for the non-zero part
-      if (n_distinct==1){ result.push_back({nd, nd, nd, nd}); } //Skip at center of tetrahedron
+      if (n_distinct==1){ results.push_back({nd, nd, nd}); } //Skip at center of tetrahedron
       else if (n_distinct==2)
       {
         if (vec[0]==vec[1])//patterns (a,a,a,b) (a,a,b,b)
         {
-          if (vec[0]==vec[2])
+          if (vec[0]==vec[2]) //pattern (a,a,a,b)
           {
-            Eigen::Vector4d v0 = r[0]-3*r[3]; 
-            Eigen::Vector4d v1 = r[1]-3*r[3]; 
-            Eigen::Vector4d v2 = r[2]-3*r[3]; 
-            Eigen::Vector4d v3 = r[3]-(r[0]+r[1]+r[2])/3; 
-            result.push_back({v0, v1, v2, v3});     
+            Eigen::Vector4d v0 = r[0]+r[1]+r[2]-3*r[3]; 
+            results.push_back({v0, nd, nd});     
           }
-          else
+          else //pattern (a,a,b,b)
           {
             Eigen::Vector4d v0 = r[0]+r[1]-r[2]-r[3]; 
-            Eigen::Vector4d v1 = r[0]+r[1]-r[2]-r[3]; 
-            Eigen::Vector4d v2 = r[2]+r[3]-r[1]-r[2]; 
-            Eigen::Vector4d v3 = r[2]+r[3]-r[1]-r[2]; 
-            result.push_back({v0, v1, v2, v3});    
+            results.push_back({v0, nd, nd});    
           }
         }
       else //patterns (a,b,b,b) (a,b,b,a)
@@ -111,57 +124,50 @@ Tensor2D<Eigen::Vector4d> FindDerivative(std::vector<Eigen::Vector4d>& r, Tensor
         if (vec[1]==vec[3])//(a,b,b,b) 
         {
           Eigen::Vector4d v0 = r[0]-(r[1]+r[2]+r[3])/3; 
-          Eigen::Vector4d v1 = r[1]-3*r[0]; 
-          Eigen::Vector4d v2 = r[2]-3*r[0]; 
-          Eigen::Vector4d v3 = r[3]-3*r[0]; 
-          result.push_back({v0, v1, v2, v3});     
+          results.push_back({v0, nd, nd});     
         }
         else //(a,b,b,a)
         {
           Eigen::Vector4d v0 = r[0]-r[1]-r[2]+r[3]; 
-          Eigen::Vector4d v1 = -r[0]+r[1]+r[2]-r[3]; 
-          Eigen::Vector4d v2 = -r[0]+r[1]+r[2]-r[3]; 
-          Eigen::Vector4d v3 = r[0]-r[1]-r[2]+r[3]; 
-          result.push_back({v0, v1, v2, v3});    
+          results.push_back({v0, nd, nd});    
         }   
       }  
       }
       else if (n_distinct ==3)
       {
-        if (vec[0]==vec[1]) //(a,a,b,c)
+        if (vec[0]==vec[1]) //(a,a,b,c) and 
         {
-          Eigen::Vector4d v0 = r[0]+r[1]-2*r[2]; 
-          Eigen::Vector4d v1 = r[0]+r[1]-2*r[2]; 
-          Eigen::Vector4d v2 =  -0.5*(r[0]+r[1])+r[2]; 
-          Eigen::Vector4d v3 =  -0.5*(r[0]+r[1])+r[3]; 
-          result.push_back({v0, v1, v2, v3});    
+          Eigen::Vector4d v0 = r[0]+r[1]-2*r[3]; 
+          Eigen::Vector4d v1 = r[2]-r[3]; 
+          results.push_back({v0, nd, v1});    
         }
         else if (vec[1]==vec[2])//(a,b,b,c)
         {
-          Eigen::Vector4d v0 = r[0]-0.5*(r[1]+r[2]); 
+          Eigen::Vector4d v0 = r[0]-r[3]; 
           Eigen::Vector4d v1 = r[1]+r[2]-2*r[0]; 
-          Eigen::Vector4d v2 = r[1]+r[2]-2*r[0]; 
-          Eigen::Vector4d v3 = r[3]-0.5*(r[1]+r[2]); 
-          result.push_back({v0, v1, v2, v3});    
+          results.push_back({v0, v1, nd});    
         }
         else //(a,b,c,c)
         {
-
+          Eigen::Vector4d v0 = r[0]-(r[2]+r[3])*0.5; 
+          Eigen::Vector4d v1 = r[1]-(r[2]+r[3])*0.5; 
+          results.push_back({v0, v1, nd});    
         }
-        //(a,a,b,c) and possible permutation of the two links 
       }
       else
       {
         Eigen::Vector4d v0 = r[0]-r[3]; 
         Eigen::Vector4d v1 = r[1]-r[3]; 
         Eigen::Vector4d v2 = r[2]-r[3]; 
-        Eigen::Vector4d v3 = 3*r[3]-r[1]-r[2]-r[0]; 
-        result.push_back({v0, v1, v2, v3});       
+        results.push_back({v0, v1, v2});       
       }
     }
-
   }
+  return results; 
 }
+
+
+
 
 
 Tensor2D<int> FindOrbitRepresentative(std::vector<int>& OrbitLabels, int tetraVertex[][3], param p){
@@ -178,7 +184,28 @@ Tensor2D<int> FindOrbitRepresentative(std::vector<int>& OrbitLabels, int tetraVe
   return result;
 }
 
-
+//gives indices to reorder target like objective
+std::vector<int> MatchIndices(std::vector<int> &objective, std::vector<int> &target)
+{
+    std::vector<int> indices;
+    std::unordered_map<int, std::vector<int>> index_map;
+    for (int i = 0; i < target.size(); ++i) {
+        index_map[target[i]].push_back(i);
+    }
+    std::unordered_map<char, int> used_count;
+    for (const auto& elem : target) 
+    {
+        used_count[elem] = 0;
+    }
+    for (int element: objective)
+    {
+        int idx = used_count[element];
+        indices.push_back(index_map[element][idx]);
+        used_count[element]++;
+    }
+  return indices; 
+    
+}
 
 
 int FindRep(Tensor2D<int>& orbit_reps, int n1, int n2, int n3, param p){
@@ -283,55 +310,6 @@ std::vector<int> FindOrbitLabels(int tetraVertex[][3], param p){
   return classlabels;}
 
 
-
-//Output for each vertex V={a,b,c,d} where V[i]=0 stands for not taking a derivative w.r.t xi^i
-// if |V[i]| = |V[j]| then the grad xi^i = -grad xi^j etc. 
-// (for cases where you lie on surfaces where xi^i=xi^j)
-
-//incomplete!
-// std::vector<int> FindOrbitDof(std::vector<std::vector<int>>&  orbitReps, param p){
-//   std::vector<std::vector<int>> result; 
-//   for (size_t i=0; i< orbitReps.size(); i++){
-//     std::vector vec = orbitReps[i]; 
-//     auto it = std::find_if(vec.begin(), vec.end(), [](int i) { return i != 0; });
-//     int distance = std::distance(vec.begin(), it); //Number of steps from the begining to first non-zero
-    
-//     std::set<int> unique_labels(it, vec.end());
-//     int n_distinct = unique_labels.size(); //Number of distinct points for the non-zero part
-    
-//     if (distance==3){
-//       result.push_back({0,0,0,0}); //We are at the vertex of the tetrahedron, not a dof
-//     }
-
-//     else if (distance==2){//We are at an edge
-
-//         if (n_distinct==1){//This is a mid point on a edge, fixed by symmetry
-//           result.push_back({0,0,0,0})
-//         }
-//         else{
-//           result.push_back({0,0,1,-1})
-//         }
-
-//     }
-
-//     else if (distance==1){//We are at a face
-
-//         if (n_distinct==1){//This is a mid point on a face, fixed by symmetry
-//             result.push_back({0,0,0,0})
-//           }
-//           else if (n_distinct==2){// Lies on  
-//             result.push_back({0,0,1,-1})
-//           }
-//     }
-//     else{//We are at an interior point 
-
-
-
-//     }
-
-//   }
-//   return results; 
-// }
 void printEven(int tetraVertex[][3], param p)
 {
   FILE* fptr = NULL;  // C style

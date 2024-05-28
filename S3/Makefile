@@ -5,8 +5,7 @@ TARGET	=  Tetra
 
 C_SOURCES =  Tetra.cpp 
 C_OBJS     =  Tetra.o 
-MY_INCLUDES = -I.
-#triangle.h
+MY_INCLUDES = -I/usr/local/include/eigen 
 
 
 CCX = g++

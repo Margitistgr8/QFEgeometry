@@ -444,8 +444,6 @@ void BuildAreaOperator(std::vector<T>& (tripletList),int (&map)[L*L][3],int (&ve
           int pos = vecInf[nx][ny][0];
           //printf("Looking at vertex: %d %d at %.8f %.8f %.8f\n", nx, ny, rvec[ny][nx][0],rvec[ny][nx][1],rvec[ny][nx][2]);
           if (pos==-1){continue;}    //Skip if vertex is not a d.o.f
-          
-
 
           double side1[3] =  {0,0,0};
           double side2[3] =  {0,0,0};
@@ -482,8 +480,7 @@ void BuildAreaOperator(std::vector<T>& (tripletList),int (&map)[L*L][3],int (&ve
             dRny[mu]*=R; 
             dRnz[mu]*=R;
           }
-
-        //Using flt space chain rule     
+    
           if (vecInf[nx][ny][1]==1){
             if (vecInf[nx][ny][2]==0){//Take derivative w.r.t xi 1           
             if (ny==0){

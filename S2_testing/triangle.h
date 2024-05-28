@@ -94,7 +94,7 @@ Eigen::Vector3d VertexDerivative(Eigen::Vector3d& r1, Eigen::Vector3d& r2, Eigen
 {
   Eigen::Vector3d e1 = r3-r2; //e1 defines vector opposite to vertex
   Eigen::Vector3d e2 = r2-r1; //e2 is used to ensure the direction of Nabla_r1 A is inwards normal
-  Eigen::Vector3d normalDirection = e2.cross(e1).cross(e1);
+  Eigen::Vector3d normalDirection = (e2.cross(e1)).cross(e1);
   return 0.5*e1.norm()*normalDirection/(normalDirection.norm());
 }
 
@@ -210,13 +210,12 @@ void InitializeOrbitInformation(Lattice &lattice)
     OrbitPos.push_back(std::distance(lattice.Vertices.begin(), it2));
   }
   lattice.OrbitPos = OrbitPos; 
-  lattice.ndof = n_orbit; 
 
   // Finding the basis
 
   Tensor2D<int> results; //Basis 
   int dof = 0; 
-  for (int i=0; i<lattice.ndof; i++)
+  for (int i=0; i<n_orbit; i++)
   {
     std::vector<int> vec = lattice.Vertices[lattice.OrbitPos[i]];
     auto it = std::find_if(vec.begin(), vec.end(), [](int i) { return i != 0; });
@@ -246,6 +245,7 @@ void InitializeOrbitInformation(Lattice &lattice)
       else{results.push_back({dof,2});dof+=2;}
     }
   }
+  lattice.ndof = dof; 
   lattice.Basis = results; 
 }
 
@@ -304,11 +304,14 @@ std::vector<Triangle> FindTriangleRepresentative(Lattice &lattice, int L){
     int v1 = PointLabels[TT[0]];
     int v2 = PointLabels[TT[1]];
     int v3 = PointLabels[TT[2]];
-    std::vector<int> elem = {v1,v2,v3};  //Triangle written in terms of point representatives
+    std::vector<int> elem = {v1,v2,v3};  //Triangle written in terms of point representatives  
+    std::vector<int> original = elem; 
     std::sort(elem.begin(), elem.end()); 
+    std::vector<int> indices = MatchIndices(elem, original); 
+
     auto it = std::find(tmp.begin(), tmp.end(), elem);
     if (it==tmp.end()){
-      Triangle A = {{TT[0], TT[1], TT[2]}, elem, 1};
+      Triangle A = {{TT[indices[0]], TT[indices[1]], TT[indices[2]]}, elem, 1};
       tmp.push_back(elem);
       result.push_back(A);  
     }
@@ -399,7 +402,6 @@ SpMat AreaOperator(Lattice &lattice, Tensor2D<Eigen::Vector3d> &DerivativeList,s
   std::vector<T> tripletList; 
   Tensor2D<int> basis = lattice.Basis; 
   int nT = 0; 
-  int max_ind = 0; 
   for (Triangle TT: TList)//iterate over triangles, to be weighed by multiplicities
   {
     std::set<int> unique_elements(TT.ClassLabels.begin(), TT.ClassLabels.end());
@@ -412,29 +414,22 @@ SpMat AreaOperator(Lattice &lattice, Tensor2D<Eigen::Vector3d> &DerivativeList,s
         auto it = std::find(TT.ClassLabels.begin(),TT.ClassLabels.end(), ind);
         int ind1 = std::distance(TT.ClassLabels.begin(), it); 
         int indV = TT.Vert[ind1]; 
-
-
         std::vector<Eigen::Vector3d> r = {lattice.rvec[TT.Vert[0]], lattice.rvec[TT.Vert[1]], lattice.rvec[TT.Vert[2]]};
-
-
         std::rotate(r.begin(), r.begin()+ind1, r.end());
         Eigen::Vector3d PointGradient = VertexDerivative(r[0], r[1], r[2]); 
 
         Eigen::Vector3d XiGradient = DerivativeList[indV][0]/lattice.xvec[indV].norm();
 
-        XiGradient+=lattice.rvec[indV]/pow(lattice.xvec[indV].norm(), 3)*DerivativeList[indV][0].dot(lattice.xvec[indV]);
+        XiGradient-=lattice.xvec[indV]/pow(lattice.xvec[indV].norm(), 3)*(DerivativeList[indV][0].dot(lattice.xvec[indV]));
 
-        tripletList.push_back(Eigen::Triplet<double>(basis[ind][0], nT, R*TT.wt*XiGradient.dot(PointGradient))); 
-        if (basis[ind][0]>max_ind){max_ind = basis[ind][0];}
+        tripletList.push_back(Eigen::Triplet<double>(basis[ind][0], nT, R*sqrt(TT.wt)*XiGradient.dot(PointGradient))); 
         if(basis[ind][1]==2)
         {
         XiGradient = DerivativeList[indV][1]/lattice.xvec[indV].norm();
-        XiGradient+= lattice.rvec[indV]/pow(lattice.xvec[indV].norm(), 3)*DerivativeList[indV][1].dot(lattice.xvec[indV]);
-
-        tripletList.push_back(Eigen::Triplet<double>(basis[ind][0]+1, nT, R*TT.wt*XiGradient.dot(PointGradient))); 
-        if (basis[ind][0]+1>max_ind){max_ind = basis[ind][0]+1;}
+        XiGradient-= lattice.xvec[indV]/pow(lattice.xvec[indV].norm(), 3)*(DerivativeList[indV][1].dot(lattice.xvec[indV]));
+        tripletList.push_back(Eigen::Triplet<double>(basis[ind][0]+1, nT, R*sqrt(TT.wt)*XiGradient.dot(PointGradient))); 
+      
         }
-         
       }
     }
     nT+=1; 
@@ -455,7 +450,7 @@ Eigen::VectorXd returnCurrentArea(Lattice &lattice, std::vector<Triangle> &TList
     Eigen::Vector3d r1 = rvec[TT.Vert[0]];
     Eigen::Vector3d r2 = rvec[TT.Vert[1]];
     Eigen::Vector3d r3 = rvec[TT.Vert[2]];
-    result[n] = TriangleArea(r1, r2, r3)*TT.wt;
+    result[n] = TriangleArea(r1, r2, r3)*sqrt(TT.wt);
     n++; 
   }
   return result; 

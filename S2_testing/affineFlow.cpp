@@ -4,7 +4,7 @@
 using namespace std;
 
 
-#define L 3
+#define L 8
 #define TWOPI  6.283185307179586
 #define Root2 1.4142135623730951
 #define Two 2
@@ -17,7 +17,7 @@ typedef Eigen::Triplet<double> T;
 //Implement size as a command line parameter
 int main(int argc, char *argv[])
 {
-    int N_iter=10; 
+    int N_iter=500; 
   
     double z = sqrt((7 + 3 * sqrt(5))/8); 
     //double z = 0; 
@@ -45,11 +45,12 @@ int main(int argc, char *argv[])
     {
       printf("Vertex Position label %d with nx, ny, nz = %d %d %d\n", i, lattice.Vertices[i][0], lattice.Vertices[i][1], lattice.Vertices[i][2]);
     }
-
-    for (int i=0; i<lattice.Vertices.size(); i++)
+        for (int i=0; i<lattice.Basis.size(); i++)
     {
-      printf("Vertex Position label %d with nx, ny, nz = %d %d %d\n", i, lattice.Vertices[i][0], lattice.Vertices[i][1], lattice.Vertices[i][2]);
+      printf("dof %d with Basis= %d %d\n", i, lattice.Basis[i][0], lattice.Basis[i][1]);
     }
+  
+
 
     // for (Triangle TT: TList)
     // {
@@ -78,13 +79,22 @@ int main(int argc, char *argv[])
 
     for (int n=0; n< N_iter; n++)
     {
+
     Eigen::VectorXd totalArea = TotalAreaList(lattice, L);
+    double epsilon =1; 
     double rms = returnRMS(totalArea); 
-    printf("iter = %d, rms = %.12f\n", n, rms); 
-    SpMat Op = AreaOperator(lattice, D, TList, R); 
+        SpMat Op = AreaOperator(lattice, D, TList, R); 
     Eigen::VectorXd Area = returnCurrentArea(lattice, TList); 
-    Eigen::VectorXd sol = setUpGMRESsolver(Op, Area, 1); 
+    Eigen::VectorXd sol = setUpGMRESsolver(Op, Area, 1);
+    printf("iter = %d, rms = %.12f,grad  = %.12f, action = %.12f\n", n, rms, sol.norm(), totalArea.norm()); 
+
+    sol*=epsilon;  
     UpdateLattice(lattice, r, sol); 
+    if (n==0)
+    {
+      std::cout<<"First Matrix\n"<<Eigen::MatrixXd(Op)<<"\n";
+      std::cout<<"First Solution\n"<<sol<<"\n";
+    }
 
     }
    
@@ -100,7 +110,6 @@ int main(int argc, char *argv[])
     {
       std::cout<< TT[0]<<' '<< TT[1]<<' '<< TT[2] <<'\n'; 
      }
-
 return 0;
 }
 

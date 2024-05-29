@@ -297,7 +297,7 @@ Lattice GenerateLattice(int L, std::vector<Eigen::Vector3d>& r)
     Eigen::Vector3d xpos  = Vertices[i][0]*r[0]+ Vertices[i][1]*r[1]+ Vertices[i][2]*r[2];
     vertex/=L;
     xpos/=L;
-    Eigen::Vector3d rpos  = xpos; 
+    Eigen::Vector3d rpos  = R*xpos/xpos.norm(); 
     xivec.push_back(vertex); 
     xvec.push_back(xpos);
     rvec.push_back(rpos);
@@ -310,6 +310,8 @@ Lattice GenerateLattice(int L, std::vector<Eigen::Vector3d>& r)
 }
 
 
+
+//Not helpful since I realized that even "identical triangles" can have distinct area depending on placement of the vertices.
 std::vector<Triangle> FindTriangleRepresentative(Lattice &lattice, int L){
   std::vector<Triangle> result; 
   Tensor2D<int> tmp; 
@@ -424,12 +426,12 @@ SpMat AreaOperator(Lattice &lattice, Tensor2D<Eigen::Vector3d> &DerivativeList,T
         Eigen::Vector3d XiGradient = DerivativeList[indV][0]/lattice.xvec[indV].norm();
         XiGradient-=lattice.xvec[indV]/pow(lattice.xvec[indV].norm(), 3)*(DerivativeList[indV][0].dot(lattice.xvec[indV]));
         //printf("target derivative is %.12f\n", DerivativeList[indV][0].dot(PointGradient)); 
-        tripletList.push_back(Eigen::Triplet<double>(basis[ind][0], nT, DerivativeList[indV][0].dot(PointGradient))); 
+        tripletList.push_back(Eigen::Triplet<double>(basis[ind][0], nT, R*XiGradient.dot(PointGradient))); 
         if(basis[ind][1]==2)
         {
         XiGradient = DerivativeList[indV][1]/lattice.xvec[indV].norm();
         XiGradient-= lattice.xvec[indV]/pow(lattice.xvec[indV].norm(), 3)*(DerivativeList[indV][1].dot(lattice.xvec[indV]));
-        tripletList.push_back(Eigen::Triplet<double>(basis[ind][0]+1, nT, DerivativeList[indV][1].dot(PointGradient))); 
+        tripletList.push_back(Eigen::Triplet<double>(basis[ind][0]+1, nT, R*XiGradient.dot(PointGradient))); 
       
         }
       }
@@ -459,12 +461,11 @@ Eigen::VectorXd returnCurrentArea(Lattice &lattice, Tensor2D<int> &TList)
 }
 
 
-Eigen::VectorXd setUpGMRESsolver(SpMat& Operator, Eigen::VectorXd& Area,  int iter_num){ 
+Eigen::VectorXd setUpGMRESsolver(SpMat& Operator, Eigen::VectorXd& val,  int iter_num){ 
     Eigen::VectorXd sol(Operator.rows());
     SpMat A = -1*Operator; 
     SpMat AtA = A*(A.transpose());
-    Eigen::VectorXd target = A*Area;
-    std::cout<<"target: "<<target<<"\n"; 
+    Eigen::VectorXd target = A*val;
     Eigen::GMRES<SpMat> solver; 
     solver.compute(AtA);
     solver.setMaxIterations(iter_num);
@@ -528,61 +529,8 @@ void UpdateLattice(Lattice &lattice, std::vector<Eigen::Vector3d> &r, Eigen::Vec
   for (int i =0; i<lattice.Vertices.size(); i++)
   {
     lattice.xvec[i] = r[0]*lattice.xivec[i][0]+r[1]*lattice.xivec[i][1]+r[2]*lattice.xivec[i][2]; 
-    lattice.rvec[i] = lattice.xvec[i]; 
+    lattice.rvec[i] = R*lattice.xvec[i]/lattice.xvec[i].norm(); 
   }
 #endif
 }
 
-
-
-
-
-
-
-//Old Code. maybe not needed?
-
-// SpMat AreaOperator(Lattice &lattice, Tensor2D<Eigen::Vector3d> &DerivativeList,std::vector<Triangle> &TList, double R)
-// {
-//   std::vector<T> tripletList; 
-
-//   std::vector<Triangle> FindTriangleRepresentative(Lattice &lattice, int L)
-//   Tensor2D<int> basis = lattice.Basis; 
-//   int nT = 0; 
-//   for (Triangle TT: TList)//iterate over triangles, to be weighed by multiplicities
-//   {
-//     //printf("Triange is: %d %d %d\n", TT.Vert[0],TT.Vert[1],TT.Vert[2]);
-//     for (int i = 0; i<3; i++)
-//     //Iterate over all the vertices in the triangle
-//     {
-
-//       int ind = lattice.VertexLabels[i]; 
-//       int indV = TT.Vert[i]; 
-//       if (basis[ind][0]==-1){continue; }
-//       else
-//       {
-//         //printf("Considering Verx %d....\n", indV); 
-//         std::vector<Eigen::Vector3d> r = {lattice.rvec[TT.Vert[0]], lattice.rvec[TT.Vert[1]], lattice.rvec[TT.Vert[2]]};
-//         std::rotate(r.begin(), r.begin()+i, r.end());
-//         Eigen::Vector3d PointGradient = VertexDerivative(r[0], r[1], r[2]); 
-
-//         //std::cout<< "PointGradient is: "<<PointGradient<<"\n";
-//         Eigen::Vector3d XiGradient = DerivativeList[indV][0]/lattice.xvec[indV].norm();
-//         XiGradient-=lattice.xvec[indV]/pow(lattice.xvec[indV].norm(), 3)*(DerivativeList[indV][0].dot(lattice.xvec[indV]));
-//         //printf("target derivative is %.12f\n", DerivativeList[indV][0].dot(PointGradient)); 
-//         tripletList.push_back(Eigen::Triplet<double>(basis[ind][0], nT, sqrt(TT.wt)*DerivativeList[indV][0].dot(PointGradient))); 
-//         if(basis[ind][1]==2)
-//         {
-//         XiGradient = DerivativeList[indV][1]/lattice.xvec[indV].norm();
-//         XiGradient-= lattice.xvec[indV]/pow(lattice.xvec[indV].norm(), 3)*(DerivativeList[indV][1].dot(lattice.xvec[indV]));
-//         tripletList.push_back(Eigen::Triplet<double>(basis[ind][0]+1, nT, sqrt(TT.wt)*DerivativeList[indV][1].dot(PointGradient))); 
-      
-//         }
-//       }
-//     }
-//     nT+=1; 
-//   }
-
-//   SpMat sparseMat(lattice.ndof, TList.size());
-//   sparseMat.setFromTriplets(tripletList.begin(), tripletList.end());
-//   return sparseMat; 
-// }

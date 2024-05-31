@@ -54,6 +54,7 @@ struct Lattice{
   std::vector<int> OrbitPos;           //size = Number of Orbits
   Tensor2D<int> Basis;                 //size = (Number of Orbits, 2)
   int ndof;                            //Number of Orbits
+  int q; //q = 5 Icosahedron, q=4 Octahedron, q=3 Tetrahedron
 };
 
 double returnRMS(Eigen::VectorXd& vec){
@@ -289,9 +290,10 @@ void InitializeOrbitInformation(Lattice &lattice)
 
 
 
-Lattice GenerateLattice(int L, std::vector<Eigen::Vector3d>& r)
+Lattice GenerateLattice(int L, std::vector<Eigen::Vector3d>& r, int q)
 {
   Lattice lattice; 
+  lattice.q = q; 
   Tensor2D<int> Vertices; 
   std::vector<Eigen::Vector3d> rvec;   
   std::vector<Eigen::Vector3d> xvec;  
@@ -484,6 +486,7 @@ Eigen::VectorXd returnCurrentArea(Lattice &lattice, Tensor2D<int> &TList)
 Eigen::VectorXd returnCurrentDualArea(Lattice &lattice, Tensor2D<int> &TList, int L)
 {
   std::vector<double> result(lattice.Vertices.size(), 0.0); 
+  int q = lattice.q; 
   
   for (int i=0;i<TList.size();i++)
   {
@@ -506,7 +509,7 @@ Eigen::VectorXd returnCurrentDualArea(Lattice &lattice, Tensor2D<int> &TList, in
     int nx = lattice.Vertices[i][0]; 
     int ny = lattice.Vertices[i][1]; 
     int nz = lattice.Vertices[i][2];
-    if (nx==L||ny==L||nz==L){result[i]*=5.0;}
+    if (nx==L||ny==L||nz==L){result[i]*=double(q);}
     else if (nx==0||ny==0||nz==0){result[i]*=2; }
   }
   Eigen::VectorXd vec = Eigen::Map<Eigen::VectorXd>(result.data(), result.size());
@@ -516,6 +519,7 @@ Eigen::VectorXd returnCurrentDualArea(Lattice &lattice, Tensor2D<int> &TList, in
 Eigen::VectorXd returnCurrentDeficit(Lattice &lattice, Tensor2D<int> &TList, int L)
 {
   std::vector<double> result(lattice.Vertices.size(), 0.0); 
+  int q= lattice.q;
   for (int i=0; i<TList.size(); i++)
   {
     std::vector<Eigen::Vector3d> r = {lattice.rvec[TList[i][0]],lattice.rvec[TList[i][1]], lattice.rvec[TList[i][2]]};
@@ -539,9 +543,11 @@ Eigen::VectorXd returnCurrentDeficit(Lattice &lattice, Tensor2D<int> &TList, int
     int nx = lattice.Vertices[i][0]; 
     int ny = lattice.Vertices[i][1]; 
     int nz = lattice.Vertices[i][2];
-    if (nx==L||ny==L||nz==L){result[i]*=5.0;}
+    if (nx==L||ny==L||nz==L){result[i]*=double(q);}
     else if (nx==0||ny==0||nz==0){result[i]*=2; }
+    result[i]+=TWOPI;
   }
+
   Eigen::VectorXd vec = Eigen::Map<Eigen::VectorXd>(result.data(), result.size());
   return vec;
 }
@@ -637,13 +643,64 @@ void PrintGeometry(Lattice &lattice, Tensor2D<int> &TList, int L)
   Eigen::VectorXd A = returnCurrentArea(lattice, TList); 
   Eigen::VectorXd D = returnCurrentDualArea(lattice, TList, L);
   Eigen::VectorXd DA = returnCurrentDeficit(lattice, TList, L);
+
+  //Calculate the average quantities across the whole sphere
+  double dmean = 0.0;  
+  double dmean_sq = 0.0; 
+  double defmean = 0.0; 
+  double defmean_sq = 0.0; 
+
+  //Multiplicity of points on the traingle is different depending on the polyhedra
+  std::vector<double> factors(3); 
+  int nVert; 
+  if (lattice.q==5)
+  {factors[0]=4.0; factors[1]=10.0;factors[2]=20.0; nVert=2+10*L*L;}
+  else if (lattice.q ==4)
+  {factors[0]=2.0;  factors[1]=4.0; factors[2]=8.0; nVert=2+4*L*L;}
+  else
+  {factors[0]=4/3;  factors[1]=2.0; factors[2]=4.0; nVert=2+2*L*L;}
+
+  for (int i =0; i<lattice.Vertices.size(); i++)
+  {
+    if (lattice.Vertices[i][0]==L|| lattice.Vertices[i][1]==L||lattice.Vertices[i][2]==L)
+    {
+      dmean      += factors[0]*D[i]; 
+      dmean_sq   += factors[0]*D[i]*D[i]; 
+      defmean    += factors[0]*DA[i]; 
+      defmean_sq += factors[0]*DA[i]*DA[i]; 
+    }
+    else if  (lattice.Vertices[i][0]==0|| lattice.Vertices[i][1]==0||lattice.Vertices[i][2]==0)
+    {
+      dmean      += factors[1]*D[i]; 
+      dmean_sq   += factors[1]*D[i]*D[i]; 
+      defmean    += factors[1]*DA[i]; 
+      defmean_sq += factors[1]*DA[i]*DA[i]; 
+    }
+    else
+    {
+      dmean      += factors[2]*D[i]; 
+      dmean_sq   += factors[2]*D[i]*D[i]; 
+      defmean    += factors[2]*DA[i]; 
+      defmean_sq += factors[2]*DA[i]*DA[i]; 
+    }
+  }
+  
+  dmean/=nVert;  
+  dmean_sq/=nVert; 
+  defmean/=nVert; 
+  defmean_sq/=nVert; 
+  double dRMS = dmean_sq-dmean*dmean; 
+  double defRMS = defmean_sq-defmean*defmean; 
+
+
+
   printf("%.16f %.16f %.16f %.16f %.16f ",
-  A.array().mean(), P.array().mean(), Cr.array().mean(), D.array().mean(), DA.array().mean());
+  A.array().mean(), P.array().mean(), Cr.array().mean(), dmean, defmean);
   printf("%.16f %.16f %.16f %.16f %.16f ",
   A.array().square().mean(), P.array().square().mean(), Cr.array().square().mean(), 
-  D.array().square().mean(), DA.array().square().mean());
+  dmean_sq, defmean_sq);
    printf("%.16f %.16f %.16f %.16f %.16f\n", returnRMS(A), returnRMS(P), returnRMS(Cr),
-   returnRMS(D), returnRMS(DA)); 
+   dRMS, defRMS); 
 }
 
 void SaveBarycentric(Lattice &lattice, FILE* file)

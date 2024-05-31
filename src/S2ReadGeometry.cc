@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
     double R= r1.norm(); 
     std::vector<Eigen::Vector3d> r={r1,r2,r3}; 
 
-    Lattice lattice = GenerateLattice(L, r);
+    Lattice lattice = GenerateLattice(L, r, q);
     Tensor2D<int> TTList = TriangleVertexMapping(lattice.Vertices, L);
     
     if (data_dir.empty())

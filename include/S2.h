@@ -553,6 +553,70 @@ Eigen::VectorXd returnCurrentDeficit(Lattice &lattice, Tensor2D<int> &TList, int
 }
 
 
+double EffectiveLatticeSpacing(Lattice &lattice, Tensor2D<int> &TList, int L)
+{
+  std::vector<Eigen::Vector3d> rvec = lattice.rvec; 
+  for (int i=0; i<rvec.size(); i++)
+  {
+    rvec[i]/=rvec[i].norm();
+  }
+
+  std::vector<double> result(lattice.Vertices.size(), 0.0); 
+  int q= lattice.q;
+  for (int i=0; i<TList.size(); i++)
+  {
+    std::vector<Eigen::Vector3d> r = {rvec[TList[i][0]],rvec[TList[i][1]], rvec[TList[i][2]]};
+    std::vector<Eigen::Vector3d> edges = {r[0]-r[1], r[0]-r[2], r[1]-r[2]};
+
+    double l1 = edges[0].norm(); 
+    double l2 = edges[1].norm(); 
+    double l3 = edges[2].norm();
+    double p = l1+l2+l3; 
+    double ratio; 
+
+    ratio = (p-2*l1)*(p-2*l2)/(p*(p-2*l3));
+    result[TList[i][0]] -= 2.0*atan(sqrt(ratio));
+    ratio = (p-2*l1)*(p-2*l3)/(p*(p-2*l2));
+    result[TList[i][1]] -=2.0*atan(sqrt(ratio));
+    ratio = (p-2*l2)*(p-2*l3)/(p*(p-2*l1));
+    result[TList[i][2]] -=2.0*atan(sqrt(ratio));
+  }
+  for (int i=0; i<lattice.Vertices.size(); i++)
+  {
+    int nx = lattice.Vertices[i][0]; 
+    int ny = lattice.Vertices[i][1]; 
+    int nz = lattice.Vertices[i][2];
+    if (nx==L||ny==L||nz==L){result[i]*=double(q);}
+    else if (nx==0||ny==0||nz==0){result[i]*=2; }
+    result[i]+=TWOPI;
+  }
+
+  Eigen::VectorXd D = Eigen::Map<Eigen::VectorXd>(result.data(), result.size());
+
+  double dmean = 0.0;  
+  //Multiplicity of points on the traingle is different depending on the polyhedra
+  std::vector<double> factors(3); 
+  int nVert; 
+  if (lattice.q==5)
+  {factors[0]=4.0; factors[1]=10.0;factors[2]=20.0; nVert=2+10*L*L;}
+  else if (lattice.q ==4)
+  {factors[0]=2.0;  factors[1]=4.0; factors[2]=8.0; nVert=2+4*L*L;}
+  else
+  {factors[0]=4/3;  factors[1]=2.0; factors[2]=4.0; nVert=2+2*L*L;}
+
+  for (int i =0; i<lattice.Vertices.size(); i++)
+  {
+    if (lattice.Vertices[i][0]==L|| lattice.Vertices[i][1]==L||lattice.Vertices[i][2]==L)
+    {dmean += factors[0]*D[i];}
+    else if  (lattice.Vertices[i][0]==0|| lattice.Vertices[i][1]==0||lattice.Vertices[i][2]==0)
+    {dmean += factors[1]*D[i];}
+    else
+    {dmean += factors[2]*D[i];}
+  }
+  dmean/=nVert;  
+  return dmean; 
+}
+
 Eigen::VectorXd setUpGMRESsolver(SpMat& Operator, Eigen::VectorXd& val,  int iter_num){ 
     Eigen::VectorXd sol(Operator.rows());
     SpMat A = -1*Operator; 
@@ -626,8 +690,113 @@ void UpdateLattice(Lattice &lattice, std::vector<Eigen::Vector3d> &r, Eigen::Vec
 #endif
 }
 
+Eigen::VectorXd returnGradient(SpMat& Operator, Eigen::VectorXd &Area)
+{
+  return 2*(Operator*Area).rowwise().sum(); 
+}
 
-//Something off with dualarea/deficit angle
+
+Eigen::VectorXd UpdateArea(Lattice &lattice, std::vector<Eigen::Vector3d> &r, Eigen::VectorXd& update, Tensor2D<int> &TList)
+{
+  std::vector<Eigen::Vector3d> xivec = lattice.xivec; 
+  std::vector<Eigen::Vector3d> xvec = lattice.xvec; 
+  std::vector<Eigen::Vector3d> rvec = lattice.rvec; 
+  Tensor2D<int> Basis = lattice.Basis; 
+  for (int i =0; i<lattice.Basis.size(); i++)
+  {
+    if (Basis[i][0]==-1){continue; }
+    else
+    {
+      int n = lattice.OrbitPos[i];
+      std::vector<int> orbit = lattice.Vertices[n];
+      if (Basis[i][1]==2){
+        Eigen::Vector3d updatevec = {-update[Basis[i][0]]-update[Basis[i][0]+1], update[Basis[i][0]],update[Basis[i][0]+1]}; 
+        xivec[n]+= updatevec; }
+      else
+      {
+        if(orbit[0]==0)//We are at an edge
+        {
+        //std::cout<<"Before Update "<<lattice.xivec[n]<<"\n"; 
+        Eigen::Vector3d updatevec = {0,update[Basis[i][0]],-update[Basis[i][0]]}; 
+        xivec[n]+= updatevec;
+        //std::cout<<"After Update "<<lattice.xivec[n]<<"\n"; 
+        }
+        else //We are at an equal xi_i xi_j line in the interior
+        {
+          if (orbit[0]==orbit[1])
+          {
+          Eigen::Vector3d updatevec = {update[Basis[i][0]],update[Basis[i][0]],-2*update[Basis[i][0]]}; 
+          xivec[n]+= updatevec;
+          }
+          else
+          {
+          Eigen::Vector3d updatevec = {-2*update[Basis[i][0]],update[Basis[i][0]],update[Basis[i][0]]}; 
+          xivec[n]+= updatevec;             
+          }
+        }
+      }
+    }
+  }
+  //Update all the sites using the primary sites
+  for (int i =0; i<lattice.Vertices.size(); i++)
+  {
+    int rep = lattice.OrbitPos[lattice.VertexLabels[i]]; //Position of the Corresponding Orbit Rep 
+    if (rep==i){continue;} //We are at a primary site
+    else
+    {
+      std::vector<int> indices = MatchIndices(lattice.Vertices[i],lattice.Vertices[rep]);
+      xivec[i] = {xivec[rep][indices[0]],xivec[rep][indices[1]],xivec[rep][indices[2]]}; 
+    }  
+  }
+  //Update xvec and rvec
+  double R = r[0].norm(); 
+  for (int i =0; i<lattice.Vertices.size(); i++)
+  {
+    xvec[i] = r[0]*xivec[i][0]+r[1]*xivec[i][1]+r[2]*xivec[i][2]; 
+    rvec[i] = R*xvec[i]/xvec[i].norm(); 
+  }
+
+  Eigen::VectorXd result(TList.size()); 
+  int n = 0; 
+  for (std::vector<int> TT: TList)
+  { 
+    Eigen::Vector3d r1 = rvec[TT[0]];
+    Eigen::Vector3d r2 = rvec[TT[1]];
+    Eigen::Vector3d r3 = rvec[TT[2]];
+    result[n] = TriangleArea(r1, r2, r3);
+    n++; 
+  }
+  return result; 
+}
+
+
+double BacktrackingLineSearch(
+ Lattice &lattice,
+ Tensor2D<int> &TList,
+ Eigen::VectorXd & Gradient, std::vector<Eigen::Vector3d> &r, Eigen::VectorXd& update, double epsilon_max)
+{
+  Eigen::VectorXd avec = returnCurrentArea(lattice, TList);
+  double AG_condition= -update.dot(Gradient)/2.0;
+  double ratio = 0.8; //This ratio technically can be finetuned too
+  double action = avec.dot(avec); 
+  int condition = 0;   
+  int counter = 0; 
+  while (condition!=1){
+      double epsilon = epsilon_max*pow(ratio, counter); 
+      Eigen::VectorXd testupdate = update*epsilon; 
+      Eigen::VectorXd newArea = UpdateArea(lattice, r, testupdate, TList);
+      if (action-newArea.dot(newArea)>=AG_condition*epsilon){           
+        epsilon_max = epsilon;
+        condition=1;
+        }
+        else{
+          counter+=1; 
+        }
+    } 
+  return epsilon_max;
+}
+
+
 void PrintGeometry(Lattice &lattice, Tensor2D<int> &TList, int L)
 {
   Eigen::VectorXd P(TList.size()); 
@@ -703,6 +872,81 @@ void PrintGeometry(Lattice &lattice, Tensor2D<int> &TList, int L)
    dRMS, defRMS); 
 }
 
+void PrintRenormalizedGeometry(Lattice &lattice, Tensor2D<int> &TList, int L)
+{
+  Eigen::VectorXd P(TList.size()); 
+  Eigen::VectorXd Cr(TList.size()); 
+  for (int i=0; i<TList.size(); i++)
+  {
+    Eigen::Vector3d r1 = lattice.rvec[TList[i][0]];
+    Eigen::Vector3d r2 = lattice.rvec[TList[i][1]];
+    Eigen::Vector3d r3 = lattice.rvec[TList[i][2]];
+    P[i] = Perimeter(r1,r2,r3); 
+    Cr[i] = Circumradius(r1,r2,r3); 
+  }
+  Eigen::VectorXd A = returnCurrentArea(lattice, TList); 
+  Eigen::VectorXd D = returnCurrentDualArea(lattice, TList, L);
+  Eigen::VectorXd DA = returnCurrentDeficit(lattice, TList, L);
+
+  //Calculate the average quantities across the whole sphere
+  double dmean = 0.0;  
+  double dmean_sq = 0.0; 
+  double defmean = 0.0; 
+  double defmean_sq = 0.0; 
+
+  //Multiplicity of points on the traingle is different depending on the polyhedra
+  std::vector<double> factors(3); 
+  int nVert; 
+  if (lattice.q==5)
+  {factors[0]=4.0; factors[1]=10.0;factors[2]=20.0; nVert=2+10*L*L;}
+  else if (lattice.q ==4)
+  {factors[0]=2.0;  factors[1]=4.0; factors[2]=8.0; nVert=2+4*L*L;}
+  else
+  {factors[0]=4/3;  factors[1]=2.0; factors[2]=4.0; nVert=2+2*L*L;}
+
+  for (int i =0; i<lattice.Vertices.size(); i++)
+  {
+    if (lattice.Vertices[i][0]==L|| lattice.Vertices[i][1]==L||lattice.Vertices[i][2]==L)
+    {
+      dmean      += factors[0]*D[i]; 
+      dmean_sq   += factors[0]*D[i]*D[i]; 
+      defmean    += factors[0]*DA[i]; 
+      defmean_sq += factors[0]*DA[i]*DA[i]; 
+    }
+    else if  (lattice.Vertices[i][0]==0|| lattice.Vertices[i][1]==0||lattice.Vertices[i][2]==0)
+    {
+      dmean      += factors[1]*D[i]; 
+      dmean_sq   += factors[1]*D[i]*D[i]; 
+      defmean    += factors[1]*DA[i]; 
+      defmean_sq += factors[1]*DA[i]*DA[i]; 
+    }
+    else
+    {
+      dmean      += factors[2]*D[i]; 
+      dmean_sq   += factors[2]*D[i]*D[i]; 
+      defmean    += factors[2]*DA[i]; 
+      defmean_sq += factors[2]*DA[i]*DA[i]; 
+    }
+  }
+  
+  dmean/=nVert;  
+  dmean_sq/=nVert; 
+  defmean/=nVert; 
+  defmean_sq/=nVert; 
+  double dRMS = dmean_sq-dmean*dmean; 
+  double defRMS = defmean_sq-defmean*defmean; 
+
+
+
+  printf("%.16f %.16f %.16f %.16f %.16f ",
+  A.array().mean(), P.array().mean(), Cr.array().mean(), dmean, defmean);
+  printf("%.16f %.16f %.16f %.16f %.16f ",
+  A.array().square().mean(), P.array().square().mean(), Cr.array().square().mean(), 
+  dmean_sq, defmean_sq);
+   printf("%.16f %.16f %.16f %.16f %.16f\n", returnRMS(A)/pow(A.array().mean(),2), returnRMS(P)/pow(P.array().mean(),2), returnRMS(Cr)/pow(Cr.array().mean(),2),
+   dRMS/pow(dmean,2), defRMS/pow(defmean,2)); 
+}
+
 void SaveBarycentric(Lattice &lattice, FILE* file)
 {
   for (int i=0; i<lattice.OrbitPos.size();i++)
@@ -710,6 +954,21 @@ void SaveBarycentric(Lattice &lattice, FILE* file)
   std::vector<double> xi = {lattice.xivec[lattice.OrbitPos[i]][0],lattice.xivec[lattice.OrbitPos[i]][1],lattice.xivec[lattice.OrbitPos[i]][2]};
    std::sort(xi.begin(), xi.end(), std::greater<double>());
    fprintf(file, "%d %.16f %.16f\n", i, xi[0], xi[1]);
+  }
+}
+void SaveTriangle(Tensor2D<int> &TList, FILE* file)
+{
+  for (int i=0; i<TList.size();i++)
+  {
+   fprintf(file, "%d %d %d\n",TList[i][0], TList[i][1], TList[i][2]);
+  }
+}
+
+void SavePosition(Lattice &lattice, FILE* file)
+{
+  for (int i=0; i<lattice.Vertices.size();i++)
+  {
+   fprintf(file, "%d %.16f %.16f %.16f\n", i, lattice.rvec[i][0], lattice.rvec[i][1], lattice.rvec[i][2]);
   }
 }
 

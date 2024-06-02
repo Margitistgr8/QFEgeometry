@@ -1,5 +1,5 @@
 CXX=g++
-CXXFLAGS=-std=c++14 -O3 -Wall -Wno-unknown-warning-option \
+CXXFLAGS=-fsanitize=address -std=c++14 -O3 -Wall -Wno-unknown-warning-option \
 	-Wno-deprecated-declarations -Wno-sign-compare \
 	-I /usr/local/include/eigen -I/usr/local/include/eigen/unsupported
 

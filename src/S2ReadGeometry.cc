@@ -41,7 +41,8 @@ int main(int argc, char *argv[])
     if (data_dir.empty())
     {
     //printf("Initialize lattice-----\n"); 
-    printf("%d ", L); 
+    double alat = EffectiveLatticeSpacing(lattice, TTList, L); 
+    printf("%d %.16f ", L, alat); 
     PrintGeometry(lattice, TTList, L);
     }
 
@@ -49,16 +50,30 @@ int main(int argc, char *argv[])
     {
     //printf("Downloading Orbit-----\n"); 
     ReadBarycentric(lattice, data_dir, double(L), r); 
-    printf("%d ", L); 
-    PrintGeometry(lattice, TTList, L);
+    double alat = EffectiveLatticeSpacing(lattice, TTList, L); 
+    printf("%d %.16f ", L, alat); 
+    PrintRenormalizedGeometry(lattice, TTList, L);
+    
+    size_t pos = data_dir.find_last_of('/');
+    std::string Directory;
+    if (pos != std::string::npos) {
+        // Resize the string to remove the characters after the last backslash
+        Directory = data_dir.substr(0, pos);
+    }
+    
+    FILE* testFull = NULL;  
+    char test[128];
+    sprintf(test, "%s/rvec_%d.dat", Directory.c_str(), L); // filename
+    testFull = fopen(test,"w");
+    SavePosition(lattice, testFull);
+    fclose(testFull);
+    
+    sprintf(test, "%s/Triangle_%d.dat", Directory.c_str(), L); // filename
+    testFull = fopen(test,"w");
+    SaveTriangle(TTList, testFull);
+    fclose(testFull);
     }
 
-    // FILE* testFull = NULL;  
-    // char test[128];
-    // sprintf(test, "/Users/jinyunlin/QFE-Research/QFEgeometry/S2_new/q4/test_xivec_%d.dat", L); // filename
-    // testFull = fopen(test,"w");
-    // SaveBarycentric(lattice, testFull);
-    // fclose(testFull);
 return 0;
 }
 

@@ -1,4 +1,4 @@
-#include "S2.h"
+#include "S2Routine.h"
 using namespace std;
 
 int main(int argc, char *argv[])
@@ -71,6 +71,11 @@ int main(int argc, char *argv[])
     sprintf(test, "%s/Triangle_%d.dat", Directory.c_str(), L); // filename
     testFull = fopen(test,"w");
     SaveTriangle(TTList, testFull);
+    fclose(testFull);
+
+    sprintf(test, "%s/geom_%d.dat", Directory.c_str(), L); // filename
+    testFull = fopen(test,"w");
+    SaveVertexGeometricInformation(lattice, testFull, TTList, L);
     fclose(testFull);
     }
 

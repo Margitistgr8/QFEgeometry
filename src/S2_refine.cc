@@ -1,4 +1,4 @@
-#include "S2.h"
+#include "S2Routine.h"
 #include <cstdlib>
 
 using namespace std;

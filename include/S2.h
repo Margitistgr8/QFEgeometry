@@ -1,5 +1,5 @@
 // s2.h
-
+// Mostly by Evan Owen, but maybe minor additions by JYL
 #pragma once
 
 #include <Eigen/Dense>

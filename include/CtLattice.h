@@ -25,6 +25,7 @@ public:
 };
 
 
+
 class AdjacencyMatrix {
 private:
      std::vector<std::vector<bool>> adjacency;
@@ -122,7 +123,7 @@ public:
         for (int i = 0; i < nextId; i++) {
             Node* node = idToNode[i];
             int root = find(node);
-            std::cout << "Node ID " << i << " is in component with root ID " << root << std::endl;
+            std::cout << "Node ID " << i << "with start, end: "<< node->data << " " << node->next->data <<" is in component with root ID " << root << std::endl;
         }
     }
 
@@ -191,70 +192,73 @@ public:
         Node->spin = Spin; 
     }
 
-    void deleteNode(Node* node){
-        if (node == nullptr||head==nullptr) return;
-        if (node == head) {
-            // Find the node before head
-            Node* temp = head;
-            while (temp->next != head) {
-                temp = temp->next;
-            }
-            // Only one node in the list
-            if (temp == head) {
-                delete head;
-                head = nullptr;
-            } else {
-                Node* newHead = head->next;
-                temp->next = newHead;
-                delete head;
-                head = newHead;
-            }
+    void   deleteNode(Node* node) {
+    if (!node || !head) return;  // nothing to delete
+
+    // Case 1: list has only one node
+    if (head == node && head->next == head) {
+        delete head;
+        head = nullptr;
+        member_num = 0;
+        return;
+    }
+
+    // General case: find the node just before `node`
+    Node* prev = head;
+    bool found = false;
+
+    do {
+        if (prev->next == node) {
+            found = true;
+            break;
+        }
+        prev = prev->next;
+    } while (prev != head);
+
+    if (!found) {
+        // Defensive: node not found in this list
+        fprintf(stderr, "Warning: Attempted to delete node not in this list.\n");
+        return;
+    }
+
+    // Rewire list: bypass the node to delete
+    prev->next = node->next;
+
+    // If deleting head, update it
+    if (node == head) {
+        head = node->next;
+    }
+
+    delete node;
+    member_num--;
+}
+    double findInterval(Node* Node){//head 
+        double val1  = Node->data;
+        double val2  = Node->next->data;
+        double dt = val2-val1; 
+
+        if (dt<=0){return invT+dt;}
+        else{return dt; } 
+    }
+
+    void mergeDuplicateSpins() {
+    if (!head || head->next == head) return;
+
+    Node* temp = head;
+    do {
+        // Stop if only one node remains
+        if (temp == temp->next) break;
+
+        // Delete duplicates while protecting circular structure
+        while (temp->next != temp && temp->next->spin == temp->spin) {
+            deleteNode(temp->next);  // relies on safe version of deleteNode
         }
 
-        else {
-            Node* prev = head;
-            while (prev->next != head && prev->next != node) {
-                prev = prev->next;
-            }
-            // Node not found
-            if (prev->next != node) return;
-
-            prev->next = node->next;
-            delete node;
-        }
-        member_num--;
-    }
-    double findInterval(Node* prevNode){//head 
-        double val1  = prevNode->data;
-        double val2  = prevNode->next->data;
-
-        if (prevNode==head&&head->next == head){return invT;}
-        else if (val2>val1){return val2-val1;}
-        else{return invT+(val2-val1);} //Wrap around has occurred. 
-    }
-    std::vector<double> returnAllIntervals()
-    {
-        std::vector<double> intervals;
-        Node* temp = head; 
-        if (temp==nullptr){return intervals;}
-        do {
-        double dt = findInterval(temp);
-        intervals.push_back(dt);
         temp = temp->next;
-        } while (temp != head);
-        return intervals;
-    }
-    void mergeDuplicateSpins()
-    {
-        if (!head|| head->next==head){return;}
-        Node* temp = head;
-        do{     
-        while(temp->next->spin == temp->spin)
-        {deleteNode(temp->next);};
-        temp = temp->next;
-        }while(temp!=head);
-    }
 
+    } while (temp != head);
+}
+    
     void display() {
     if (head == nullptr) return;
 
@@ -292,50 +296,107 @@ struct ContinuousTimeLattice{
 };
 
 
-bool checkWrap(Node* node){
-    return node->data > node->next->data;
-};
+
 //Chatgpt
-double intervalOverlap(double start1, double end1, double start2, double end2, double invT) {
-    // Assume intervals are non-wrapping
-    double overlapStart = std::max(start1, start2);
-    double overlapEnd = std::min(end1, end2);
-    return std::max(0.0, overlapEnd - overlapStart);
-}
-//Chatgpt
-double returnOverlap(Node* node1, Node* node2, double invT){
-    double nx = node1->data;
-    double ny = node1->next->data;
-    double mx = node2->data;
-    double my = node2->next->data;
+std::vector<int> getTimeBinsSpanned(double start, double end, double invT, int n_bins) {
+    std::vector<int> bins;
+    double bin_width = invT / n_bins;
 
-    double totalOverlap = 0.0;
+    auto timeToBin = [&](double t) {
+        // clamp t to [0, invT)
+        t = fmod(t + invT, invT);
+        return static_cast<int>(t / bin_width);
+    };
 
-    // Split intervals if they wrap
-    std::vector<std::pair<double, double>> intervals1, intervals2;
-
-    if (nx <= ny) {
-        intervals1.push_back({nx, ny});
+    if (start == end) {
+        // Full circle: include all bins
+        for (int b = 0; b < n_bins; ++b) {
+            bins.push_back(b);
+        }
     } else {
-        intervals1.push_back({nx, invT});
-        intervals1.push_back({0.0, ny});
-    }
+        int b_start = timeToBin(start);
+        int b_end = timeToBin(end);
 
-    if (mx <= my) {
-        intervals2.push_back({mx, my});
-    } else {
-        intervals2.push_back({mx, invT});
-        intervals2.push_back({0.0, my});
-    }
-
-    // Compare all pairs
-    for (auto& i1 : intervals1) {
-        for (auto& i2 : intervals2) {
-            totalOverlap += intervalOverlap(i1.first, i1.second, i2.first, i2.second, invT);
+        if (end > start) {
+            for (int b = b_start; b <= b_end; ++b) {
+                bins.push_back(b % n_bins);
+            }
+        } else {
+            // Wraparound: [start, invT) ∪ [0, end)
+            for (int b = b_start; b < n_bins; ++b) {
+                bins.push_back(b);
+            }
+            for (int b = 0; b <= b_end; ++b) {
+                bins.push_back(b);
+            }
         }
     }
 
-    return totalOverlap;
+    std::sort(bins.begin(), bins.end());
+    bins.erase(std::unique(bins.begin(), bins.end()), bins.end());
+    return bins;
+}
+
+//Chatgpt
+double intervalOverlap(double start1, double end1, double start2, double end2, double invT) {
+    if (start1 == end1 && start2 == end2)
+    return invT; //Both intervals completely wrap around worldline.
+    
+    //takes care of edge case when only one interval completely wraps around wordline
+    if (start1 == end1) return (end2 >= start2) ? (end2 - start2) : (invT - start2 + end2);
+    if (start2 == end2) return (end1 >= start1) ? (end1 - start1) : (invT - start1 + end1);
+
+
+    auto segmentToRanges = [&](double start, double end) -> std::vector<std::pair<double, double>> {
+        if (end >= start) {
+            return {{start, end}};
+        } else {
+            return {{start, invT}, {0.0, end}};
+        }
+    };
+
+    double overlap = 0.0;
+    auto ranges1 = segmentToRanges(start1, end1);
+    auto ranges2 = segmentToRanges(start2, end2);
+
+    for (const auto& r1 : ranges1) {
+        for (const auto& r2 : ranges2) {
+            double s = std::max(r1.first, r2.first);
+            double e = std::min(r1.second, r2.second);
+            overlap += std::max(0.0, e - s);
+        }
+    }
+
+    return overlap;
+}
+struct SpinSegment {
+    double start;
+    double end;
+    int spin;
+    Node* node;
+};
+
+void printSpinSegment(const SpinSegment& seg) {
+    std::cout << "  Segment[start=" << seg.start
+              << ", end=" << seg.end
+              << ", spin=" << seg.spin
+              << ", node_ptr=" << seg.node
+              << "]\n";
+}
+
+std::vector<SpinSegment> extractSegments(CircularLinkedList& lad, double invT) {
+    std::vector<SpinSegment> segments;
+    if (!lad.head) return segments;
+
+    Node* current = lad.head;
+    do {
+        double start = current->data;
+        double end = current->next->data;
+        //if (end < start) end += invT; // handle wraparound
+        segments.push_back({start, end, current->spin, current});
+        current = current->next;
+    } while (current != lad.head);
+    return segments;
 }
 
 

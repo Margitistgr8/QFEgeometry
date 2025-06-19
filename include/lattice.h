@@ -1,5 +1,5 @@
 // lattice.h
-
+//By Evan Owens 
 #pragma once
 
 #include <algorithm>
@@ -65,6 +65,7 @@ class QfeLattice {
   virtual void ReadFace(FILE* file, int f);
   virtual void ReadCell(FILE* file, int c);
   void SeedRng(unsigned int seed);
+  void InitChain(int Nx, double wtx);
   void InitRect(int Nx, int Ny, double wt_x, double wt_y);
   void InitTriangle(int N, double wt1, double wt2, double wt3);
   void InitTriangle(int Nx, int Ny, double wt1, double wt2, double wt3);
@@ -313,6 +314,29 @@ void QfeLattice::ReadCell(FILE* file, int c) {
  */
 
 void QfeLattice::SeedRng(unsigned int seed) { rng = QfeRng(seed); }
+
+
+/** added by JYL 
+ * @brief Create a chain lattice with periodic boundary conditions
+ *
+ * @param Nx Lattice Size
+ * @param wtx Link weights
+ */
+void QfeLattice::InitChain(int Nx, double wtx){  
+  ResizeSites(Nx);
+  for (int s = 0; s < n_sites; s++) {
+    sites[s].wt = 1.0;
+    sites[s].nn = 0;
+    sites[s].id = 0;
+  }
+
+  links.clear();
+  for (int s = 0; s < n_sites; s++) {
+    int t = (s + 1) % n_sites;  // periodic neighbor
+    AddLink(s, t, wtx);
+  }
+}
+
 
 /**
  * @brief Create a flat, rectangular lattice with periodic boundary conditions

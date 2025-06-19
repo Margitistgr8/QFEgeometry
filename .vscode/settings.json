@@ -79,6 +79,7 @@
         "filesystem": "cpp",
         "core": "cpp",
         "__functional_03": "cpp",
-        "*.tpp": "cpp"
+        "*.tpp": "cpp",
+        "unordered_set": "cpp"
     }
 }
